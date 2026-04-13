@@ -57,6 +57,19 @@ Implementation of Yao's classic Millionaires' Problem using COTI's Garbled Circu
 
 ---
 
+### 🏛️ Private Treasury Approval
+**Source Code:** [/private-treasury-approval](./private-treasury-approval)
+
+A cross-chain treasury approval demo where a source-chain payout proposal is approved privately on COTI. The owner creates and executes proposals on the source chain, while committee members submit encrypted yes/no approvals whose tallies remain private until finalization.
+
+**Key Features:**
+- Owner + approver workflow with separate roles
+- Private encrypted approval submission
+- Cross-chain registration/finalization status visibility
+- Decryption of recorded receipts and final yes/no tallies
+
+---
+
 
 ### 🗳️ Encrypted Voting
 **Live Demo:** [https://vote.demo.coti.io](https://vote.demo.coti.io)  
