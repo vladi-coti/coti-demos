@@ -2,8 +2,7 @@
 pragma solidity ^0.8.19;
 
 import "@coti-io/coti-contracts/contracts/utils/mpc/MpcCore.sol";
-
-import "../../InboxUser.sol";
+import "@coti/pod-sdk/contracts/InboxUser.sol";
 
 contract PrivateTreasuryApprovalCoti is InboxUser {
     event ProposalStored(uint256 indexed proposalId);

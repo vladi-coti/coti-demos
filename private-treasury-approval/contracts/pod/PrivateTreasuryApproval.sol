@@ -2,11 +2,11 @@
 pragma solidity ^0.8.19;
 
 import "@coti-io/coti-contracts/contracts/utils/mpc/MpcCore.sol";
+import "@coti/pod-sdk/contracts/IInbox.sol";
+import "@coti/pod-sdk/contracts/mpc/PodLibBase.sol";
+import "@coti/pod-sdk/contracts/mpccodec/MpcAbiCodec.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-import "../../IInbox.sol";
-import "../../mpc/PodLibBase.sol";
-import "../../mpccodec/MpcAbiCodec.sol";
 import "./IPrivateTreasuryApprovalCoti.sol";
 
 contract PrivateTreasuryApproval is PodLibBase, ReentrancyGuard {

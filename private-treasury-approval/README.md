@@ -30,6 +30,11 @@ This is not a fake mockup. It drives the real flow:
 - Source chain: Sepolia
 - MPC side: COTI Testnet
 
+## Contract Layout
+
+- `contracts/coti/` contains contracts deployed on COTI
+- `contracts/pod/` contains the non-COTI/source-chain side contracts and helpers
+
 ## Installation
 
 ```bash
