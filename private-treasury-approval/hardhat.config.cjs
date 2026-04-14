@@ -1,8 +1,6 @@
-import "@nomicfoundation/hardhat-ethers";
-import "@nomicfoundation/hardhat-verify";
-import { config as dotenvConfig } from "dotenv";
-
-dotenvConfig();
+require("@nomicfoundation/hardhat-ethers");
+require("@nomicfoundation/hardhat-verify");
+require("dotenv").config();
 
 const normalizePk = (value) => {
   if (!value) return value;
@@ -18,7 +16,7 @@ const accounts = [
   .map(normalizePk);
 
 /** @type import('hardhat/config').HardhatUserConfig */
-export default {
+module.exports = {
   solidity: {
     version: "0.8.20",
     settings: {

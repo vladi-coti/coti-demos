@@ -4,6 +4,7 @@
   "description": "Private treasury approval demo using COTI MPC and cross-chain inbox flows",
   "type": "module",
   "scripts": {
+    "deploy:native": "hardhat run scripts/deploy-PrivateTreasuryApprovalNative.js --network cotiTestnet",
     "deploy:source": "hardhat run scripts/deploy-PrivateTreasuryApproval.js --network sepolia",
     "deploy:coti": "hardhat run scripts/deploy-PrivateTreasuryApprovalCoti.js --network cotiTestnet",
     "compile": "hardhat compile",

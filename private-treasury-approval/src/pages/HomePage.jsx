@@ -23,13 +23,13 @@ import {
   Mono,
   Notice,
   Section,
-  Subtitle,
-  TextArea,
   StepArrow,
   StepCard,
   StepFlow,
   StepHeader,
   StepNumber,
+  Subtitle,
+  TextArea,
   TimelineContent,
   TimelineDot,
   TimelineItem,
@@ -60,11 +60,12 @@ const formatTimestamp = (value) => {
 
 const isZeroRequestId = (value, zeroRequestId) => !value || value === zeroRequestId;
 
-const getStageTone = (snapshot, zeroRequestId) => {
+const getStageTone = (snapshot, zeroRequestId, supportsPendingCallbacks) => {
   if (!snapshot) return "info";
   if (snapshot.executed) return "success";
   if (snapshot.finalized && snapshot.approved) return "success";
   if (snapshot.finalized && !snapshot.approved) return "error";
+  if (!supportsPendingCallbacks) return snapshot.registered ? "info" : "warning";
   if (!isZeroRequestId(snapshot.pendingFinalize, zeroRequestId)) return "warning";
   if (snapshot.pendingApprovalCount > 0n) return "warning";
   if (snapshot.registered) return "info";
@@ -72,8 +73,8 @@ const getStageTone = (snapshot, zeroRequestId) => {
   return "info";
 };
 
-const hasPendingActivity = (snapshot, zeroRequestId) => {
-  if (!snapshot) return false;
+const hasPendingActivity = (snapshot, zeroRequestId, supportsPendingCallbacks) => {
+  if (!snapshot || !supportsPendingCallbacks) return false;
   return (
     !isZeroRequestId(snapshot.pendingRegister, zeroRequestId) ||
     !isZeroRequestId(snapshot.pendingFinalize, zeroRequestId) ||
@@ -88,14 +89,12 @@ const isProposalExpired = (snapshot) => {
   return Number(snapshot.deadline) <= now;
 };
 
-const isDeadUnregisteredProposal = (snapshot) => {
-  if (!snapshot) return false;
+const isDeadUnregisteredProposal = (snapshot, supportsRemoteRegistration) => {
+  if (!snapshot || !supportsRemoteRegistration) return false;
   return isProposalExpired(snapshot) && !snapshot.registered;
 };
 
-const buildTimeline = (snapshot, zeroRequestId) => {
-  if (!snapshot) return [];
-
+const buildPodTimeline = (snapshot, zeroRequestId, config) => {
   const voteWindowClosed = isProposalExpired(snapshot);
 
   return [
@@ -103,17 +102,17 @@ const buildTimeline = (snapshot, zeroRequestId) => {
       title: "Proposal created",
       tone: "success",
       status: "Done",
-      text: `Proposal #${snapshot.proposalId.toString()} targets ${shorten(snapshot.recipient)} for ${formatEth(snapshot.amount)}.`,
+      text: `Proposal #${snapshot.proposalId.toString()} targets ${shorten(snapshot.recipient)} for ${formatEth(snapshot.amount)} on ${config.primaryChainLabel}.`,
     },
     {
       title: snapshot.registered ? "Remote registration complete" : "Remote registration",
       tone: snapshot.registered ? "success" : !isZeroRequestId(snapshot.pendingRegister, zeroRequestId) ? "warning" : "info",
       status: snapshot.registered ? "Done" : !isZeroRequestId(snapshot.pendingRegister, zeroRequestId) ? "Pending" : "Next",
       text: snapshot.registered
-        ? "The COTI-side tally contract knows this proposal and voting can proceed."
+        ? `The ${config.secondaryContractLabel.toLowerCase()} knows this proposal and private voting can proceed.`
         : !isZeroRequestId(snapshot.pendingRegister, zeroRequestId)
-          ? "Registration transaction was sent. Wait for the cross-chain callback, then refresh."
-          : "Registration is not yet confirmed. Retry only if the callback is clearly stuck.",
+          ? "Registration was sent over the inbox path. Wait for the callback, then refresh."
+          : "Registration is not yet confirmed. Retry only if the callback path is clearly stuck.",
     },
     {
       title: "Private approvals",
@@ -137,7 +136,7 @@ const buildTimeline = (snapshot, zeroRequestId) => {
         snapshot.pendingApprovalCount > 0n
           ? `${snapshot.pendingApprovalCount.toString()} approval callback(s) are still pending.`
           : snapshot.finalized
-            ? "Voting is closed and tallies are already fixed."
+            ? "Voting is closed and the tallies are already fixed."
             : snapshot.approverEligible
               ? "The configured approver can submit an encrypted yes/no vote from the Approver panel."
               : "The configured approver wallet is not eligible for this proposal.",
@@ -151,7 +150,7 @@ const buildTimeline = (snapshot, zeroRequestId) => {
           ? "Finalization succeeded and the proposal met its threshold."
           : "Finalization succeeded but the proposal did not meet its threshold."
         : voteWindowClosed
-          ? "Voting deadline passed. If no approval callbacks are pending, the owner can finalize now."
+          ? "Voting deadline passed. If no callbacks are pending, the owner can finalize now."
           : `Voting is still open until ${formatTimestamp(snapshot.deadline)}.`,
     },
     {
@@ -159,12 +158,64 @@ const buildTimeline = (snapshot, zeroRequestId) => {
       tone: snapshot.executed ? "success" : snapshot.finalized && snapshot.approved ? "warning" : "info",
       status: snapshot.executed ? "Done" : snapshot.finalized && snapshot.approved ? "Ready" : "Waiting",
       text: snapshot.executed
-        ? "The treasury payout was executed on the source chain."
+        ? `The payout was executed on ${config.primaryChainLabel}.`
         : snapshot.finalized && snapshot.approved
           ? "The proposal is approved and ready for `executeProposal`."
-          : "Execution is blocked until finalization marks the proposal as approved.",
+          : "Execution stays blocked until finalization marks the proposal as approved.",
     },
   ];
+};
+
+const buildNativeTimeline = (snapshot, config) => {
+  const voteWindowClosed = isProposalExpired(snapshot);
+
+  return [
+    {
+      title: "Proposal created",
+      tone: "success",
+      status: "Done",
+      text: `Proposal #${snapshot.proposalId.toString()} targets ${shorten(snapshot.recipient)} for ${formatEth(snapshot.amount)} on ${config.primaryChainLabel}.`,
+    },
+    {
+      title: "Private approvals",
+      tone: snapshot.finalized ? "success" : snapshot.approverEligible ? "info" : "warning",
+      status: snapshot.finalized ? "Done" : snapshot.approverEligible ? "Ready" : "Blocked",
+      text: snapshot.finalized
+        ? "Voting is closed and the tallies are already fixed on COTI."
+        : snapshot.approverEligible
+          ? "The configured approver can submit an encrypted yes/no vote directly to the COTI treasury contract."
+          : "The configured approver wallet is not eligible for this proposal.",
+    },
+    {
+      title: snapshot.finalized ? "Proposal finalized" : "Finalization",
+      tone: snapshot.finalized ? (snapshot.approved ? "success" : "error") : voteWindowClosed ? "warning" : "info",
+      status: snapshot.finalized ? (snapshot.approved ? "Approved" : "Rejected") : voteWindowClosed ? "Ready" : "Waiting",
+      text: snapshot.finalized
+        ? snapshot.approved
+          ? "Finalization succeeded and the proposal met its threshold."
+          : "Finalization succeeded but the proposal did not meet its threshold."
+        : voteWindowClosed
+          ? "Voting deadline passed. The owner can finalize directly on COTI now."
+          : `Voting is still open until ${formatTimestamp(snapshot.deadline)}.`,
+    },
+    {
+      title: snapshot.executed ? "Treasury payout executed" : "Treasury execution",
+      tone: snapshot.executed ? "success" : snapshot.finalized && snapshot.approved ? "warning" : "info",
+      status: snapshot.executed ? "Done" : snapshot.finalized && snapshot.approved ? "Ready" : "Waiting",
+      text: snapshot.executed
+        ? "The payout was executed directly on COTI."
+        : snapshot.finalized && snapshot.approved
+          ? "The proposal is approved and ready for `executeProposal`."
+          : "Execution stays blocked until finalization marks the proposal as approved.",
+    },
+  ];
+};
+
+const buildTimeline = (snapshot, zeroRequestId, config) => {
+  if (!snapshot) return [];
+  return config.supportsRemoteRegistration
+    ? buildPodTimeline(snapshot, zeroRequestId, config)
+    : buildNativeTimeline(snapshot, config);
 };
 
 function ActionNotice({ notice, getExplorerLink }) {
@@ -185,6 +236,9 @@ function ActionNotice({ notice, getExplorerLink }) {
 }
 
 function HomePage() {
+  const [mode, setMode] = useState(() =>
+    import.meta.env.VITE_NATIVE_COTI_CONTRACT_ADDRESS ? "native" : "pod"
+  );
   const {
     config,
     defaults,
@@ -201,7 +255,7 @@ function HomePage() {
     executeProposal,
     decryptApproverReceipt,
     decryptTallies,
-  } = usePrivateTreasuryApproval();
+  } = usePrivateTreasuryApproval(mode);
 
   const addresses = getAddresses();
   const [proposalForm, setProposalForm] = useState({
@@ -233,6 +287,26 @@ function HomePage() {
   });
 
   useEffect(() => {
+    setProposalForm({
+      recipient: defaults.recipient,
+      amountEth: "0.2",
+      minutesUntilDeadline: "10",
+      threshold: "1",
+      approvers: defaults.approvers,
+      descriptionText: mode === "native" ? "Native COTI treasury payout proposal" : "Sepolia PoD treasury payout proposal",
+    });
+    setFundAmount("0.5");
+    setProposalIdInput("");
+    setSnapshot(null);
+    setTreasuryBalance(0n);
+    setTallies(null);
+    setReceipt(null);
+    setOwnerNotice(emptyNotice);
+    setApproverNotice(emptyNotice);
+    setGlobalNotice(emptyNotice);
+  }, [defaults.approvers, defaults.recipient, mode]);
+
+  useEffect(() => {
     if (!proposalForm.approvers || proposalForm.approvers === defaults.approvers) {
       if (addresses.approver) {
         setProposalForm((current) => ({
@@ -259,22 +333,22 @@ function HomePage() {
     return () => {
       cancelled = true;
     };
-  }, [config.sourceContractAddress]);
+  }, [config.primaryContractAddress]);
 
   useEffect(() => {
     if (!proposalIdInput) return undefined;
-    if (!hasPendingActivity(snapshot, defaults.zeroRequestId)) return undefined;
+    if (!hasPendingActivity(snapshot, defaults.zeroRequestId, config.supportsPendingCallbacks)) return undefined;
 
     const timer = window.setInterval(() => {
       refreshProposal(proposalIdInput, { silent: true }).catch(() => {});
     }, 7000);
 
     return () => window.clearInterval(timer);
-  }, [defaults.zeroRequestId, proposalIdInput, snapshot]);
+  }, [config.supportsPendingCallbacks, defaults.zeroRequestId, proposalIdInput, snapshot]);
 
   const timeline = useMemo(
-    () => buildTimeline(snapshot, defaults.zeroRequestId),
-    [defaults.zeroRequestId, snapshot]
+    () => buildTimeline(snapshot, defaults.zeroRequestId, config),
+    [config, defaults.zeroRequestId, snapshot]
   );
 
   const generatedDescriptionHash = useMemo(() => {
@@ -285,20 +359,27 @@ function HomePage() {
     return ethers.keccak256(ethers.toUtf8Bytes(text));
   }, [defaults.descriptionHash, proposalForm.descriptionText]);
 
-  const stageTone = getStageTone(snapshot, defaults.zeroRequestId);
+  const stageTone = getStageTone(snapshot, defaults.zeroRequestId, config.supportsPendingCallbacks);
   const proposalExpired = isProposalExpired(snapshot);
-  const deadUnregisteredProposal = isDeadUnregisteredProposal(snapshot);
+  const deadUnregisteredProposal = isDeadUnregisteredProposal(snapshot, config.supportsRemoteRegistration);
   const registrationPending = Boolean(
-    snapshot && !isZeroRequestId(snapshot.pendingRegister, defaults.zeroRequestId)
+    config.supportsPendingCallbacks && snapshot && !isZeroRequestId(snapshot.pendingRegister, defaults.zeroRequestId)
   );
   const finalizePending = Boolean(
-    snapshot && !isZeroRequestId(snapshot.pendingFinalize, defaults.zeroRequestId)
+    config.supportsPendingCallbacks && snapshot && !isZeroRequestId(snapshot.pendingFinalize, defaults.zeroRequestId)
   );
   const approvalPendingForApprover = Boolean(
-    snapshot && !isZeroRequestId(snapshot.approverPendingApproval, defaults.zeroRequestId)
+    config.supportsPendingCallbacks &&
+      snapshot &&
+      !isZeroRequestId(snapshot.approverPendingApproval, defaults.zeroRequestId)
   );
   const canRetryRegister = Boolean(
-    snapshot && !snapshot.registered && !registrationPending && !snapshot.finalized && !deadUnregisteredProposal
+    config.supportsRemoteRegistration &&
+      snapshot &&
+      !snapshot.registered &&
+      !registrationPending &&
+      !snapshot.finalized &&
+      !deadUnregisteredProposal
   );
   const canVote = Boolean(
     snapshot &&
@@ -313,8 +394,7 @@ function HomePage() {
       snapshot.registered &&
       !snapshot.finalized &&
       proposalExpired &&
-      snapshot.pendingApprovalCount === 0n &&
-      !finalizePending
+      (!config.supportsPendingCallbacks || (snapshot.pendingApprovalCount === 0n && !finalizePending))
   );
   const canExecute = Boolean(snapshot && snapshot.finalized && snapshot.approved && !snapshot.executed);
 
@@ -340,7 +420,7 @@ function HomePage() {
         if (!silent) {
           setGlobalNotice({
             variant: "error",
-            message: `Proposal #${targetProposalId} does not exist on the source contract.`,
+            message: `Proposal #${targetProposalId} does not exist on the selected ${config.primaryContractLabel.toLowerCase()}.`,
             txHash: "",
           });
         }
@@ -352,7 +432,7 @@ function HomePage() {
       if (!silent) {
         setGlobalNotice({
           variant: "success",
-          message: "Proposal state refreshed from the source contract.",
+          message: `Proposal state refreshed from the ${config.primaryContractLabel.toLowerCase()}.`,
           txHash: "",
         });
       }
@@ -374,7 +454,7 @@ function HomePage() {
       const balance = await getTreasuryBalance();
       setTreasuryBalance(balance);
       if (proposalIdInput) {
-        await refreshProposal(proposalIdInput);
+        await refreshProposal(proposalIdInput, { silent: true });
       }
     } catch (error) {
       setOwnerNotice({
@@ -398,7 +478,7 @@ function HomePage() {
       });
       setGlobalNotice(emptyNotice);
       if (proposalIdInput) {
-        await refreshProposal(proposalIdInput);
+        await refreshProposal(proposalIdInput, { silent: true });
       }
     } catch (error) {
       setApproverNotice({
@@ -449,12 +529,14 @@ function HomePage() {
       setReceipt(null);
       setOwnerNotice({
         variant: "success",
-        message: `Created proposal #${result.proposalId}. Registration is asynchronous, so refresh after the callback lands.`,
+        message: config.supportsRemoteRegistration
+          ? `Created proposal #${result.proposalId}. Registration is asynchronous, so refresh after the callback lands.`
+          : `Created proposal #${result.proposalId}. Native COTI mode is ready for private approvals immediately.`,
         txHash: result.hash,
       });
       const balance = await getTreasuryBalance();
       setTreasuryBalance(balance);
-      await refreshProposal(result.proposalId);
+      await refreshProposal(result.proposalId, { silent: true });
     } catch (error) {
       setOwnerNotice({
         variant: "error",
@@ -467,6 +549,14 @@ function HomePage() {
   };
 
   const onRetryRegister = async () => {
+    if (!config.supportsRemoteRegistration) {
+      setOwnerNotice({
+        variant: "info",
+        message: "Native COTI mode does not use remote registration.",
+        txHash: "",
+      });
+      return;
+    }
     if (!canRetryRegister) {
       setOwnerNotice({
         variant: "warning",
@@ -488,9 +578,7 @@ function HomePage() {
     if (!canVote) {
       setApproverNotice({
         variant: "warning",
-        message: proposalExpired
-          ? "Voting is closed for this proposal."
-          : "This proposal is not ready for approval yet.",
+        message: proposalExpired ? "Voting is closed for this proposal." : "This proposal is not ready for approval yet.",
         txHash: "",
       });
       return;
@@ -498,7 +586,9 @@ function HomePage() {
     await handleApproverAction(
       "vote",
       () => castApproval(proposalIdInput, support),
-      `Encrypted ${support ? "YES" : "NO"} vote submitted. Refresh after the callback lands.`
+      config.supportsRemoteRegistration
+        ? `Encrypted ${support ? "YES" : "NO"} vote submitted. Refresh after the callback lands.`
+        : `Encrypted ${support ? "YES" : "NO"} vote submitted directly on COTI.`
     );
   };
 
@@ -507,9 +597,11 @@ function HomePage() {
       setOwnerNotice({
         variant: "warning",
         message: deadUnregisteredProposal
-          ? "This proposal expired before remote registration completed, so finalization is not available. Create a new proposal after the miner/relay path is working."
+          ? "This proposal expired before remote registration completed, so finalization is not available. Create a new proposal after the relay path is working."
           : proposalExpired
-            ? "Finalization is only available after registration completes and all approval callbacks are finished."
+            ? config.supportsPendingCallbacks
+              ? "Finalization is only available after registration completes and all approval callbacks are finished."
+              : "Finalization is available once the voting deadline has passed."
             : "This proposal is still in its voting window.",
         txHash: "",
       });
@@ -518,7 +610,9 @@ function HomePage() {
     await handleOwnerAction(
       "finalize",
       () => finalizeProposal(proposalIdInput),
-      "Finalize transaction sent. Refresh after the callback lands."
+      config.supportsRemoteRegistration
+        ? "Finalize transaction sent. Refresh after the callback lands."
+        : "Finalize transaction sent directly on COTI."
     );
   };
 
@@ -590,30 +684,50 @@ function HomePage() {
         <CardGrid>
           <Card $span={12}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: "16px", flexWrap: "wrap" }}>
-              <div style={{ maxWidth: "760px" }}>
+              <div style={{ maxWidth: "820px" }}>
                 <Title>Private Treasury Approval</Title>
                 <Subtitle style={{ marginTop: "12px" }}>
-                  A stage-based demo shell for the `PrivateTreasuryApproval` flow. The owner proposes a payout on the
-                  source chain, COTI privately tallies encrypted approvals, then the owner finalizes and executes if the
-                  threshold is met.
+                  Compare the same treasury approval dApp in two modes: a native COTI flow with no relay dependency, and
+                  a Sepolia + PoD flow where execution stays on Sepolia while private tallying and callbacks run through
+                  COTI.
                 </Subtitle>
               </div>
               <div style={{ display: "flex", gap: "10px", alignItems: "flex-start", flexWrap: "wrap" }}>
                 <Badge $tone={config.missingConfig.length ? "error" : stageTone}>
                   {config.missingConfig.length ? "Config incomplete" : snapshot ? "Proposal loaded" : "Ready"}
                 </Badge>
+                <Badge $tone={config.mode === "native" ? "success" : "info"}>{config.modeLabel}</Badge>
                 {proposalExpired ? <Badge $tone="warning">Voting period ended</Badge> : null}
                 {deadUnregisteredProposal ? <Badge $tone="error">Registration missed deadline</Badge> : null}
               </div>
             </div>
 
+            <ButtonRow $top="18px">
+              <Button onClick={() => setMode("native")} $variant={mode === "native" ? undefined : "secondary"}>
+                Native COTI
+              </Button>
+              <Button onClick={() => setMode("pod")} $variant={mode === "pod" ? undefined : "secondary"}>
+                Sepolia + PoD
+              </Button>
+            </ButtonRow>
+
+            <Notice $variant={config.requiresRelay ? "warning" : "success"} style={{ marginTop: "18px" }}>
+              <strong>{config.modeLabel}</strong>: {config.modeDescription}
+              <br />
+              Execution chain: <Mono>{config.primaryChainLabel}</Mono>
+              <br />
+              Privacy / tally chain: <Mono>{config.privacyChainLabel}</Mono>
+              <br />
+              Relay requirement: <Mono>{config.requiresRelay ? "Yes, inbox callbacks must be processed" : "No relay required"}</Mono>
+            </Notice>
+
             <MetricList style={{ marginTop: "20px", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
               <Metric>
-                <MetricLabel>Source Treasury Contract</MetricLabel>
+                <MetricLabel>{config.primaryContractLabel}</MetricLabel>
                 <MetricValue>
-                  {config.sourceContractAddress ? (
-                    <Link href={getAddressLink(config.sourceContractAddress)} target="_blank" rel="noreferrer">
-                      {shorten(config.sourceContractAddress)}
+                  {config.primaryContractAddress ? (
+                    <Link href={getAddressLink(config.primaryContractAddress)} target="_blank" rel="noreferrer">
+                      {shorten(config.primaryContractAddress)}
                     </Link>
                   ) : (
                     "Not configured"
@@ -621,14 +735,18 @@ function HomePage() {
                 </MetricValue>
               </Metric>
               <Metric>
-                <MetricLabel>COTI Treasury Contract</MetricLabel>
+                <MetricLabel>{config.secondaryContractLabel || "Secondary Contract"}</MetricLabel>
                 <MetricValue>
-                  {config.cotiContractAddress ? (
-                    <Link href={getAddressLink(config.cotiContractAddress, "coti")} target="_blank" rel="noreferrer">
-                      {shorten(config.cotiContractAddress)}
+                  {config.secondaryContractAddress ? (
+                    <Link
+                      href={getAddressLink(config.secondaryContractAddress, "secondary")}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {shorten(config.secondaryContractAddress)}
                     </Link>
                   ) : (
-                    "Not configured"
+                    "Not used in native mode"
                   )}
                 </MetricValue>
               </Metric>
@@ -637,15 +755,21 @@ function HomePage() {
                 <MetricValue>{formatEth(treasuryBalance)}</MetricValue>
               </Metric>
               <Metric>
-                <MetricLabel>Configured Fees</MetricLabel>
+                <MetricLabel>Fee Model</MetricLabel>
                 <MetricValue>
-                  callback <Mono>{config.callbackFeeWei.toString()}</Mono>
-                  <br />
-                  create <Mono>{config.createTotalFeeWei.toString()}</Mono>
-                  <br />
-                  vote <Mono>{config.approvalTotalFeeWei.toString()}</Mono>
-                  <br />
-                  finalize <Mono>{config.finalizeTotalFeeWei.toString()}</Mono>
+                  {config.supportsCrossChainFees ? (
+                    <>
+                      callback <Mono>{config.callbackFeeWei.toString()}</Mono>
+                      <br />
+                      create <Mono>{config.createTotalFeeWei.toString()}</Mono>
+                      <br />
+                      vote <Mono>{config.approvalTotalFeeWei.toString()}</Mono>
+                      <br />
+                      finalize <Mono>{config.finalizeTotalFeeWei.toString()}</Mono>
+                    </>
+                  ) : (
+                    "No cross-chain fee budget. Transactions execute directly on COTI."
+                  )}
                 </MetricValue>
               </Metric>
             </MetricList>
@@ -662,8 +786,9 @@ function HomePage() {
           <Card $span={5}>
             <CardTitle>Owner Flow</CardTitle>
             <Subtitle>
-              The owner funds the treasury, creates the proposal, retries registration if needed, finalizes after the
-              deadline, and executes approved payouts.
+              {config.supportsRemoteRegistration
+                ? "The owner funds the treasury on Sepolia, creates the proposal, retries remote registration if needed, finalizes after the deadline, and executes approved payouts."
+                : "The owner funds the treasury on COTI, creates the proposal, finalizes after the deadline, and executes approved payouts without an inbox round-trip."}
             </Subtitle>
 
             <MetricList style={{ marginTop: "16px" }}>
@@ -762,7 +887,7 @@ function HomePage() {
                 onChange={(event) => setProposalForm((current) => ({ ...current, approvers: event.target.value }))}
               />
               <HelperText>
-                Keep this list small. This shell is for a focused example, not a full committee admin console.
+                Keep this list small. The comparison is about native-vs-PoD privacy mechanics, not committee management.
               </HelperText>
             </Field>
 
@@ -789,13 +914,15 @@ function HomePage() {
             </ButtonRow>
 
             <ButtonRow $top="12px">
-              <Button
-                onClick={onRetryRegister}
-                disabled={loading.register || !proposalIdInput || !canRetryRegister}
-                $variant="secondary"
-              >
-                {loading.register ? "Retrying..." : "Retry Register"}
-              </Button>
+              {config.supportsRemoteRegistration ? (
+                <Button
+                  onClick={onRetryRegister}
+                  disabled={loading.register || !proposalIdInput || !canRetryRegister}
+                  $variant="secondary"
+                >
+                  {loading.register ? "Retrying..." : "Retry Register"}
+                </Button>
+              ) : null}
               <Button onClick={onFinalize} disabled={loading.finalize || !proposalIdInput || !canFinalize}>
                 {loading.finalize ? "Finalizing..." : "Finalize"}
               </Button>
@@ -816,8 +943,9 @@ function HomePage() {
           <Card $span={3}>
             <CardTitle>Approver Flow</CardTitle>
             <Subtitle>
-              The approver signs the source-chain transaction, but the vote itself is encrypted with the COTI wallet and
-              only the recorded receipt can be decrypted later.
+              {config.supportsRemoteRegistration
+                ? "The approver signs on Sepolia, but the vote payload is encrypted for the COTI inbox so the PoD callback path can process it."
+                : "The approver encrypts and submits the vote directly to the native COTI treasury contract, then decrypts the recorded receipt later."}
             </Subtitle>
 
             <MetricList style={{ marginTop: "16px" }}>
@@ -880,73 +1008,76 @@ function HomePage() {
               <>
                 {proposalExpired ? (
                   <Notice $variant="warning" style={{ marginBottom: "12px" }}>
-                    This proposal has reached its voting deadline. No new approvals should be submitted. If no approval
-                    callbacks are still pending, the next step is finalization.
+                    {config.supportsPendingCallbacks
+                      ? "This proposal reached its voting deadline. No new approvals should be submitted. If no callbacks are still pending, the next step is finalization."
+                      : "This proposal reached its voting deadline. No new approvals should be submitted. The next step is finalization."}
                   </Notice>
                 ) : null}
                 {deadUnregisteredProposal ? (
                   <Notice $variant="error" style={{ marginBottom: "12px" }}>
-                    This proposal expired before remote registration completed. It is not a useful candidate for
-                    approval or finalization anymore. Create a new proposal after the miner/relay path is running.
+                    This proposal expired before remote registration completed. It is not a useful candidate for approval
+                    or finalization anymore. Create a new proposal after the relay path is working.
                   </Notice>
                 ) : null}
                 <MetricList>
-                <Metric>
-                  <MetricLabel>Proposal</MetricLabel>
-                  <MetricValue>
-                    #{snapshot.proposalId.toString()} to{" "}
-                    <Link href={getAddressLink(snapshot.recipient)} target="_blank" rel="noreferrer">
-                      {snapshot.recipient}
-                    </Link>
-                  </MetricValue>
-                </Metric>
-                <Metric>
-                  <MetricLabel>Status</MetricLabel>
-                  <MetricValue>
-                    registered={String(snapshot.registered)}
-                    <br />
-                    finalized={String(snapshot.finalized)}
-                    <br />
-                    approved={String(snapshot.approved)}
-                    <br />
-                    executed={String(snapshot.executed)}
-                  </MetricValue>
-                </Metric>
-                <Metric>
-                  <MetricLabel>Voting Window</MetricLabel>
-                  <MetricValue>
-                    deadline {formatTimestamp(snapshot.deadline)}
-                    <br />
-                    threshold {snapshot.threshold.toString()}
-                    <br />
-                    pending approvals {snapshot.pendingApprovalCount.toString()}
-                  </MetricValue>
-                </Metric>
-                <Metric>
-                  <MetricLabel>Cross-chain Request Ids</MetricLabel>
-                  <MetricValue>
-                    register <Mono>{snapshot.pendingRegister}</Mono>
-                    <br />
-                    finalize <Mono>{snapshot.pendingFinalize}</Mono>
-                    <br />
-                    approver <Mono>{snapshot.approverPendingApproval}</Mono>
-                  </MetricValue>
-                </Metric>
-                {tallies ? (
                   <Metric>
-                    <MetricLabel>Decrypted Tallies</MetricLabel>
+                    <MetricLabel>Proposal</MetricLabel>
                     <MetricValue>
-                      yes {tallies.yesVotes.toString()}
-                      <br />
-                      no {tallies.noVotes.toString()}
+                      #{snapshot.proposalId.toString()} to{" "}
+                      <Link href={getAddressLink(snapshot.recipient)} target="_blank" rel="noreferrer">
+                        {snapshot.recipient}
+                      </Link>
                     </MetricValue>
                   </Metric>
-                ) : null}
+                  <Metric>
+                    <MetricLabel>Status</MetricLabel>
+                    <MetricValue>
+                      registered={String(snapshot.registered)}
+                      <br />
+                      finalized={String(snapshot.finalized)}
+                      <br />
+                      approved={String(snapshot.approved)}
+                      <br />
+                      executed={String(snapshot.executed)}
+                    </MetricValue>
+                  </Metric>
+                  <Metric>
+                    <MetricLabel>Voting Window</MetricLabel>
+                    <MetricValue>
+                      deadline {formatTimestamp(snapshot.deadline)}
+                      <br />
+                      threshold {snapshot.threshold.toString()}
+                      <br />
+                      pending approvals {snapshot.pendingApprovalCount.toString()}
+                    </MetricValue>
+                  </Metric>
+                  {config.supportsPendingCallbacks ? (
+                    <Metric>
+                      <MetricLabel>Cross-chain Request Ids</MetricLabel>
+                      <MetricValue>
+                        register <Mono>{snapshot.pendingRegister}</Mono>
+                        <br />
+                        finalize <Mono>{snapshot.pendingFinalize}</Mono>
+                        <br />
+                        approver <Mono>{snapshot.approverPendingApproval}</Mono>
+                      </MetricValue>
+                    </Metric>
+                  ) : null}
+                  {tallies ? (
+                    <Metric>
+                      <MetricLabel>Decrypted Tallies</MetricLabel>
+                      <MetricValue>
+                        yes {tallies.yesVotes.toString()}
+                        <br />
+                        no {tallies.noVotes.toString()}
+                      </MetricValue>
+                    </Metric>
+                  ) : null}
                 </MetricList>
               </>
             ) : (
               <Notice $variant="warning">
-                Load a proposal id to see live source-chain state.
+                Load a proposal id to see live state on the selected {config.primaryContractLabel.toLowerCase()}.
               </Notice>
             )}
           </Card>
@@ -954,19 +1085,22 @@ function HomePage() {
           <Card $span={12}>
             <CardTitle>Lifecycle Timeline</CardTitle>
             <Subtitle>
-              This workflow completes in stages. Registration, approvals, and finalization may remain pending while
-              cross-chain callbacks are processed.
+              {config.supportsPendingCallbacks
+                ? "PoD mode exposes the inbox-driven stages so you can see exactly where relay or callback latency shows up."
+                : "Native mode removes the inbox round-trip so the lifecycle is shorter and easier to reason about."}
             </Subtitle>
             <HelperText style={{ marginTop: "8px" }}>
-              {proposalIdInput && hasPendingActivity(snapshot, defaults.zeroRequestId)
+              {proposalIdInput && hasPendingActivity(snapshot, defaults.zeroRequestId, config.supportsPendingCallbacks)
                 ? "State refresh is running automatically while a cross-chain step is pending."
-                : "Once a proposal is selected, this view advances as each stage completes."}
+                : config.requiresRelay
+                  ? "Once a proposal is selected, this view advances as each callback stage completes."
+                  : "Once a proposal is selected, this view advances as each on-chain stage completes."}
             </HelperText>
 
             <StepFlow style={{ marginTop: "18px" }}>
               {timeline.length ? (
                 timeline.map((item, index) => (
-                  <React.Fragment key={item.title}>
+                  <React.Fragment key={`${config.mode}-${item.title}`}>
                     <StepCard $tone={item.tone}>
                       <StepHeader>
                         <StepNumber>{index + 1}</StepNumber>
@@ -984,8 +1118,7 @@ function HomePage() {
                   <TimelineContent>
                     <TimelineTitle>Nothing loaded yet</TimelineTitle>
                     <TimelineText>
-                      Create or refresh a proposal to populate the timeline. If callbacks are delayed, use the refresh
-                      button instead of assuming failure.
+                      Create or refresh a proposal to populate the timeline for the selected mode.
                     </TimelineText>
                   </TimelineContent>
                 </TimelineItem>
