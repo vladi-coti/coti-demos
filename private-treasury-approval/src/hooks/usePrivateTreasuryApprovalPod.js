@@ -19,6 +19,7 @@ export function usePrivateTreasuryApprovalPod() {
   const sourceContractAddress = getEnvValue("VITE_POD_SOURCE_CONTRACT_ADDRESS", "VITE_SOURCE_CONTRACT_ADDRESS");
   const cotiContractAddress = getEnvValue("VITE_POD_COTI_CONTRACT_ADDRESS", "VITE_COTI_CONTRACT_ADDRESS");
   const cotiInboxAddress = getEnvValue("VITE_POD_COTI_INBOX_ADDRESS", "VITE_COTI_INBOX_ADDRESS");
+  const podEncryptionUrl = getEnvValue("VITE_POD_ENCRYPTION_URL").trim();
 
   const ownerPk = getEnvValue("VITE_POD_OWNER_PK", "VITE_OWNER_PK");
   const ownerAesKey = getEnvValue("VITE_POD_OWNER_AES_KEY", "VITE_OWNER_AES_KEY");
@@ -60,7 +61,7 @@ export function usePrivateTreasuryApprovalPod() {
     !sourceRpcUrl ? "VITE_POD_SOURCE_RPC_URL" : null,
     isMissingAddress(sourceContractAddress) ? "VITE_POD_SOURCE_CONTRACT_ADDRESS" : null,
     isMissingAddress(cotiContractAddress) ? "VITE_POD_COTI_CONTRACT_ADDRESS" : null,
-    isMissingAddress(cotiInboxAddress) ? "VITE_POD_COTI_INBOX_ADDRESS" : null,
+    !podEncryptionUrl && isMissingAddress(cotiInboxAddress) ? "VITE_POD_COTI_INBOX_ADDRESS" : null,
     !wallets.ownerSourceWallet ? "VITE_OWNER_PK" : null,
     !wallets.ownerCotiWallet ? "VITE_OWNER_AES_KEY" : null,
     !wallets.approverSourceWallet ? "VITE_APPROVER_PK" : null,
@@ -209,19 +210,62 @@ export function usePrivateTreasuryApprovalPod() {
     );
   };
 
-  const castApproval = async (proposalId, support, totalFeeWei = approvalTotalFeeWei) => {
-    if (!wallets.approverSourceWallet || !wallets.approverCotiWallet) {
-      throw new Error("Approver wallets are not configured");
+  const encryptApprovalVote = async (support) => {
+    const clearValue = support ? "1" : "0";
+
+    if (podEncryptionUrl) {
+      const response = await fetch(`${podEncryptionUrl.replace(/\/$/, "")}/buildEncryptedInputs`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          dataType: "bool",
+          value: clearValue,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Hosted PoD encryption failed: ${errorText}`);
+      }
+
+      const payload = await response.json();
+      if (payload?.ciphertext == null || payload?.signature == null) {
+        throw new Error("Hosted PoD encryption response is missing ciphertext or signature");
+      }
+
+      const ciphertext =
+        typeof payload.ciphertext === "string" && payload.ciphertext.startsWith("0x")
+          ? BigInt(payload.ciphertext)
+          : BigInt(payload.ciphertext);
+      const signature = String(payload.signature).startsWith("0x")
+        ? String(payload.signature)
+        : `0x${String(payload.signature)}`;
+
+      return {
+        ciphertext,
+        signature,
+      };
     }
+
     if (isMissingAddress(cotiInboxAddress)) {
       throw new Error("VITE_POD_COTI_INBOX_ADDRESS is missing or invalid");
     }
 
-    const encryptedVote = await wallets.approverCotiWallet.encryptValue(
-      BigInt(support ? 1 : 0),
+    return wallets.approverCotiWallet.encryptValue(
+      BigInt(clearValue),
       cotiInboxAddress,
       BATCH_PROCESS_REQUESTS_SELECTOR
     );
+  };
+
+  const castApproval = async (proposalId, support, totalFeeWei = approvalTotalFeeWei) => {
+    if (!wallets.approverSourceWallet || !wallets.approverCotiWallet) {
+      throw new Error("Approver wallets are not configured");
+    }
+
+    const encryptedVote = await encryptApprovalVote(support);
 
     const contract = getContract(wallets.approverSourceWallet);
     return formatTxResult(
@@ -309,6 +353,7 @@ export function usePrivateTreasuryApprovalPod() {
       modeLabel: "Sepolia + PoD",
       modeDescription:
         "Transactions run on Sepolia while private tallying and callback delivery run through COTI Testnet via inbox relay.",
+      encryptionMode: podEncryptionUrl ? "hosted" : "wallet",
       primaryChainLabel: "Sepolia",
       privacyChainLabel: "COTI Testnet",
       primaryContractLabel: "Sepolia Treasury Contract",

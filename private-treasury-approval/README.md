@@ -59,6 +59,7 @@ VITE_APPROVER_AES_KEY=...
 VITE_SOURCE_CONTRACT_ADDRESS=0x...
 VITE_COTI_CONTRACT_ADDRESS=0x...
 VITE_COTI_INBOX_ADDRESS=0x...
+VITE_POD_ENCRYPTION_URL=https://fullnode.testnet.coti.io/pod-encryption
 
 VITE_CALLBACK_FEE_WEI=1000000000000000
 VITE_CREATE_TOTAL_FEE_WEI=3000000000000000
@@ -183,6 +184,8 @@ If these are too low, transactions will fail.
 ### Encryption path for approvals
 
 The private yes/no vote is encrypted against the COTI inbox `batchProcessRequests(...)` selector, not the source treasury contract. That is required for the `itBool` approval payload to survive the inbox/executor path.
+
+If `VITE_POD_ENCRYPTION_URL` is set, the PoD UI uses that hosted encryption service instead of `wallet.encryptValue(...)`. This is useful for testing against the same public service used by the hosted Millionaire demo.
 
 ## Available Scripts
 
