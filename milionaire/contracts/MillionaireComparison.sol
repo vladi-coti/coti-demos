@@ -106,8 +106,8 @@ contract MillionaireComparison {
         require(_aliceSet && _bobSet, "Both parties must submit their wealth first");
 
         // Load encrypted wealth
-        gtUint64 aliceWealth = MpcCore.onBoard(_aliceWealth.userCiphertext);
-        gtUint64 bobWealth = MpcCore.onBoard(_bobWealth.userCiphertext);
+        gtUint64 aliceWealth = MpcCore.onBoard(_aliceWealth.ciphertext);
+        gtUint64 bobWealth = MpcCore.onBoard(_bobWealth.ciphertext);
 
         // Perform comparison: ONLY check if Alice is richer
         // true  = Alice > Bob
@@ -159,7 +159,7 @@ contract MillionaireComparison {
      */
     function getAliceWealth() public view returns (ctUint64) {
         require(_aliceSet, "Alice's wealth not set yet");
-        return _aliceWealth.ciphertext;
+        return _aliceWealth.userCiphertext;
     }
 
     /**
@@ -168,7 +168,7 @@ contract MillionaireComparison {
      */
     function getBobWealth() public view returns (ctUint64) {
         require(_bobSet, "Bob's wealth not set yet");
-        return _bobWealth.ciphertext;
+        return _bobWealth.userCiphertext;
     }
 
     /**
