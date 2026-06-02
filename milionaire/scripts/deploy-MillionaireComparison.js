@@ -1,11 +1,13 @@
-import hre from "hardhat";
-const { ethers } = hre;
+import { network } from "hardhat";
 import { config as dotenvConfig } from 'dotenv';
+import { getPrivateKey } from "../src/lib/KeyUtils.js";
 
 dotenvConfig();
 
 async function main() {
-    console.log("Deploying MillionaireComparison contract to COTI Testnet...");
+    const connection = await network.connect();
+    const { ethers } = connection;
+    console.log(`Deploying MillionaireComparison contract to ${connection.networkName}...`);
 
     // Get the deployer account
     const signers = await ethers.getSigners();
@@ -20,17 +22,11 @@ async function main() {
     console.log("Account balance:", ethers.formatEther(balance), "ETH");
 
     // Get Alice and Bob addresses from environment variables
-    // If not provided, use deployer as Alice and create a dummy Bob address
-    const alicePrivateKey = process.env.VITE_ALICE_PK;
-    const bobPrivateKey = process.env.VITE_BOB_PK;
-
     let aliceAddress, bobAddress;
 
-    if (alicePrivateKey && bobPrivateKey) {
-        const aliceWallet = new ethers.Wallet(alicePrivateKey);
-        const bobWallet = new ethers.Wallet(bobPrivateKey);
-        aliceAddress = aliceWallet.address;
-        bobAddress = bobWallet.address;
+    if (process.env.VITE_ALICE_PK?.trim() && process.env.VITE_BOB_PK?.trim()) {
+        aliceAddress = new ethers.Wallet(getPrivateKey('VITE_ALICE_PK')).address;
+        bobAddress = new ethers.Wallet(getPrivateKey('VITE_BOB_PK')).address;
         console.log("Alice address:", aliceAddress);
         console.log("Bob address:", bobAddress);
     } else {
@@ -45,15 +41,11 @@ async function main() {
 
     console.log("Deploying MillionaireComparison...");
 
-    // Deploy with explicit gas settings for COTI Testnet
-    const millionaireComparison = await MillionaireComparison.deploy(
-        aliceAddress,
-        bobAddress,
-        {
-            gasLimit: 3000000,
-            gasPrice: ethers.parseUnits("10", "gwei")
-        }
-    );
+    // The constructor takes no args; players are set via configurePlayers() after deploy.
+    const millionaireComparison = await MillionaireComparison.deploy({
+        gasLimit: 3000000,
+        gasPrice: ethers.parseUnits("10", "gwei")
+    });
 
     console.log("Transaction sent, waiting for confirmation...");
 
@@ -70,13 +62,22 @@ async function main() {
         process.exit(1);
     }
 
+    console.log("Configuring players (Alice and Bob)...");
+    const configureTx = await millionaireComparison.configurePlayers(
+        aliceAddress,
+        bobAddress,
+        { gasLimit: 500000 }
+    );
+    await configureTx.wait();
+    console.log("configurePlayers tx:", configureTx.hash);
+
     console.log("✅ MillionaireComparison successfully deployed!");
     console.log("Contract address:", contractAddress);
     console.log("Transaction hash:", millionaireComparison.deploymentTransaction()?.hash);
 
     // Save deployment info
     const deploymentInfo = {
-        network: "cotiTestnet",
+        network: connection.networkName,
         contractName: "MillionaireComparison",
         contractAddress: contractAddress,
         deployerAddress: deployer.address,

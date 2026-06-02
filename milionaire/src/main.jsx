@@ -1,15 +1,14 @@
-import React from 'react'
-import ReactDOM from 'react-dom/client'
-import App from './App.jsx'
-import './index.css'
-import './components/transitions.css'
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App.jsx';
+import './index.css';
+import './components/transitions.css';
+import { Buffer } from 'buffer';
 
-// Polyfills for browser compatibility
-import { Buffer } from 'buffer'
-window.Buffer = Buffer
+window.Buffer = Buffer;
 
 ReactDOM.createRoot(document.getElementById('root')).render(
     <React.StrictMode>
         <App />
-    </React.StrictMode>,
-)
+    </React.StrictMode>
+);

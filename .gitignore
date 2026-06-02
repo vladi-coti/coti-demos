@@ -26,3 +26,6 @@ milionaire/VERIFICATION_GUIDE.md
 coti-snap
 coti-sandbox
 hardhat_deploy
+.devcontainer
+artifacts-pod
+cache-pod
