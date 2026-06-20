@@ -6,7 +6,7 @@ import { config as dotenvConfig } from "dotenv";
 
 dotenvConfig();
 
-/** `coti` (default): native MPC contract. `pod`: MillionaireComparisonPod + @coti-io/coti-contracts PoD contracts (OZ v5, solc 0.8.26). */
+/** `coti` (default): native MPC contract. `pod`: MillionaireComparisonPod + pod-mpc-lib PoD contracts (OZ v5, solc 0.8.26). */
 const scope = process.env.HARDHAT_CONTRACTS_SCOPE === "pod" ? "pod" : "coti";
 
 /** COTI testnet RPC (Hardhat does not read Vite envPrefix) */

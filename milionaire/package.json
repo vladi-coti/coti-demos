@@ -27,6 +27,7 @@
     "@noble/hashes": "^2.0.1",
     "@openzeppelin/contracts": "^5.6.1",
     "ethers": "^6.0.0",
+    "pod-mpc-lib": "github:cotitech-io/pod-mpc-lib",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^7.9.5",

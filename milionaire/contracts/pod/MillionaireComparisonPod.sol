@@ -2,9 +2,9 @@
 
 pragma solidity ^0.8.19;
 
-import { PodLibBase } from "@coti-io/coti-contracts/contracts/pod/mpc/PodLibBase.sol";
-import { PodLib } from "@coti-io/coti-contracts/contracts/pod/mpc/PodLib.sol";
-import { ctBool, ctUint256, itUint256 } from "@coti-io/coti-contracts/contracts/utils/mpc/MpcCore.sol";
+import { PodLibBase } from "pod-mpc-lib/mpc/PodLibBase.sol";
+import { PodLib } from "pod-mpc-lib/mpc/PodLib.sol";
+import { ctBool, ctUint256, itUint256 } from "pod-mpc-lib/utils/mpc/MpcCore.sol";
 
 /**
  * @title MillionaireComparisonPod

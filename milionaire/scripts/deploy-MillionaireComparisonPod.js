@@ -5,7 +5,7 @@
  * post-deploy via the SDK's owner-only `configure(inbox, mpcExecutor, cotiChainId)`.
  *
  * Sepolia: uses `SEPOLIA_DEFAULT_INBOX_ADDRESS`.
- * Fuji: set `AVALANCHE_FUJI_DEFAULT_INBOX_ADDRESS` in `src/lib/podChainDefaults.js` before deploy
+ * Fuji: set `AVALANCHE_FUJI_DEFAULT_INBOX_ADDRESS` in `src/lib/pod/defaults.js` before deploy
  *       (while it is `0x000…`, `configure` leaves the inbox unset).
  *
  *   npm run deploy:pod
@@ -19,7 +19,7 @@ import {
     COTI_TESTNET_CHAIN_ID,
     COTI_TESTNET_MPC_EXECUTOR_ADDRESS,
     SEPOLIA_DEFAULT_INBOX_ADDRESS,
-} from '../src/lib/podChainDefaults.js';
+} from '../src/lib/pod/defaults.js';
 
 dotenvConfig();
 
@@ -108,7 +108,7 @@ async function main() {
         console.log('configure tx:', cfgTx.hash);
     } else {
         console.warn(
-            `⚠️  No inbox set for ${networkName}. Set its address in src/lib/podChainDefaults.js, then call configure() before use.`,
+            `⚠️  No inbox set for ${networkName}. Set its address in src/lib/pod/defaults.js, then call configure() before use.`,
         );
     }
 
