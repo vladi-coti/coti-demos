@@ -3,13 +3,13 @@ import styled, { css, keyframes } from 'styled-components';
 import {
     COTI_TESTNET_CHAIN_ID,
     SEPOLIA_CHAIN_ID,
-} from '../lib/podChainDefaults.js';
-import { AVALANCHE_FUJI_CHAIN_ID } from '../lib/podNetworkConfig.js';
+} from '../lib/pod/defaults.js';
+import { AVALANCHE_FUJI_CHAIN_ID } from '../lib/pod/network.js';
 import {
     createMillionairePodRequest,
     findExecutionErrorInTree,
     isPodTrackComplete,
-} from '../lib/podRequestTrack.js';
+} from '../lib/pod/requestTrack.js';
 
 const shimmer = keyframes`
   0% { background-position: 0% 50%; }
@@ -409,13 +409,13 @@ const STEPS_META = [
         label: 'Callback',
         hint: 'Inbox → contract',
         title:
-            'When the Sepolia inbox marks this outbound request executed, the callback to your contract has been delivered for this leg.',
+            'When the inbox marks this outbound request executed, the callback to your contract has been delivered for this leg.',
         Icon: IconCheck,
     },
 ];
 
 /**
- * @param {import('../lib/podRequestTrack.js').RequestTrackingResponse | null} track
+ * @param {import('../lib/pod/requestTrack.js').RequestTrackingResponse | null} track
  * @param {boolean} hasExecErr
  * @returns {{ states: ('pending'|'active'|'done'|'error')[], progress: number }}
  */
@@ -471,17 +471,11 @@ export function PodRequestTracker({
     appChainId = SEPOLIA_CHAIN_ID,
     appInboxAddress,
     appRpcUrl,
-    /** @deprecated use appInboxAddress */
-    sepoliaInboxAddress,
-    /** @deprecated use appRpcUrl */
-    sepoliaRpcUrl,
     requestIdBob,
     inboxExplorerUrl,
     podRequestExplorerUrl,
     onSettled,
 }) {
-    const inbox = appInboxAddress ?? sepoliaInboxAddress;
-    const rpc = appRpcUrl ?? sepoliaRpcUrl;
     const trackChainId =
         appChainId === SEPOLIA_CHAIN_ID || appChainId === AVALANCHE_FUJI_CHAIN_ID
             ? appChainId
@@ -494,15 +488,15 @@ export function PodRequestTracker({
         () =>
             createMillionairePodRequest({
                 appChainId: trackChainId,
-                appInboxAddress: inbox,
-                appRpcUrl: rpc,
+                appInboxAddress,
+                appRpcUrl,
             }),
-        [trackChainId, inbox, rpc]
+        [trackChainId, appInboxAddress, appRpcUrl]
     );
 
     const inboxLink = useMemo(
-        () => (inboxExplorerUrl ? inboxExplorerUrl(inbox) : null),
-        [inbox, inboxExplorerUrl]
+        () => (inboxExplorerUrl && appInboxAddress ? inboxExplorerUrl(appInboxAddress) : null),
+        [appInboxAddress, inboxExplorerUrl]
     );
 
     const podExplorerHref = useMemo(
@@ -528,9 +522,14 @@ export function PodRequestTracker({
 
                 const failed = Boolean(findExecutionErrorInTree(t));
                 const done = isPodTrackComplete(t);
-                if ((done || failed) && !settledRef.current) {
+                if (!settledRef.current && (done || failed)) {
                     settledRef.current = true;
-                    onSettled?.();
+                    onSettled?.({
+                        success: done && !failed,
+                        failed,
+                        execution: failed ? findExecutionErrorInTree(t) : null,
+                        track: t,
+                    });
                 }
             } catch (e) {
                 if (cancelled) return;
@@ -615,7 +614,7 @@ export function PodRequestTracker({
 
                 <IdBox>
                     <div style={{ opacity: 0.6, fontSize: '0.62rem', marginBottom: '0.3rem' }}>
-                        Request id (Bob / 2nd gt64)
+                        Request id
                     </div>
                     {podExplorerHref ? (
                         <IdLink
@@ -643,7 +642,7 @@ export function PodRequestTracker({
                         )}
                         {inboxLink && (
                             <a href={inboxLink} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit' }}>
-                                Sepolia inbox on explorer
+                                Inbox on explorer
                             </a>
                         )}
                     </Foot>

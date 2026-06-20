@@ -9,8 +9,8 @@ import {
     COTI_TESTNET_DEFAULT_INBOX_ADDRESS,
     DEFAULT_COTI_TESTNET_RPC_URL,
     SEPOLIA_CHAIN_ID,
-} from './podChainDefaults.js';
-import { readEnv } from './envRead.js';
+} from './defaults.js';
+import { readEnv } from '../envRead.js';
 
 export const ERROR_CODE_EXECUTION_FAILED = 1n;
 export const ERROR_CODE_ENCODE_FAILED = 2n;
@@ -288,29 +288,13 @@ export function isPodTrackComplete(t) {
     return t.executed === true;
 }
 
-/**
- * @param {{
- *   appChainId?: number;
- *   appInboxAddress?: string;
- *   appRpcUrl?: string;
- *   sepoliaInboxAddress?: string;
- *   sepoliaRpcUrl?: string;
- *   cotiInboxAddress?: string;
- *   cotiRpcUrl?: string;
- * }} p
- * @returns {PodRequest}
- */
-export function createMillionairePodRequest(p) {
-    const appChainId = p.appChainId ?? SEPOLIA_CHAIN_ID;
-    const appInbox = p.appInboxAddress ?? p.sepoliaInboxAddress;
-    const appRpc = p.appRpcUrl ?? p.sepoliaRpcUrl;
-
+export function createMillionairePodRequest({ appChainId, appInboxAddress, appRpcUrl, cotiInboxAddress, cotiRpcUrl }) {
     const cotiInbox =
-        p.cotiInboxAddress ||
+        cotiInboxAddress ||
         readEnv('VITE_POD_COTI_INBOX_ADDRESS') ||
         COTI_TESTNET_DEFAULT_INBOX_ADDRESS;
     const cotiRpc =
-        p.cotiRpcUrl ||
+        cotiRpcUrl ||
         readEnv('COTI_TESTNET_RPC_URL') ||
         readEnv('VITE_COTI_RPC_URL') ||
         readEnv('VITE_COTI_APP_NODE_HTTPS_ADDRESS') ||
@@ -319,7 +303,7 @@ export function createMillionairePodRequest(p) {
 
     return new PodRequest({
         chains: [
-            { chainId: appChainId, inboxAddress: appInbox, rpcUrl: appRpc },
+            { chainId: appChainId ?? SEPOLIA_CHAIN_ID, inboxAddress: appInboxAddress, rpcUrl: appRpcUrl },
             { chainId: COTI_TESTNET_CHAIN_ID, inboxAddress: cotiInbox, rpcUrl: cotiRpc },
         ],
     });

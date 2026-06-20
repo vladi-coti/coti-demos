@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
 import { AppContainer, CardsContainer, Card, FormGroup, ButtonGroup } from '../components/styles.js';
-import { POD_NETWORKS } from '../lib/podNetworkConfig.js';
+import { POD_NETWORKS } from '../lib/pod/network.js';
 
 const HeaderTitle = styled.h1`
     color: ${(props) => props.theme.colors.text.default} !important;

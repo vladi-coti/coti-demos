@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import styled, { keyframes } from 'styled-components'
 import IntroModal from '../components/IntroModal.jsx'
 import { PodRequestTracker } from '../components/PodRequestTracker.jsx'
-import { isPodDemoNetwork, POD_NETWORKS, getPodNetwork } from '../lib/podNetworkConfig.js'
+import { isPodDemoNetwork, POD_NETWORKS, getPodNetwork } from '../lib/pod/network.js'
 
 const EXPLORER = {
     coti: {
@@ -28,7 +28,7 @@ import {
     ButtonGroup
 } from '../components/styles.js'
 
-/** Used on PoD pages (`/sepolia`, `/avalanche`) — decimal wealth UI and `millionaireWealthEncrypt`. */
+/** Used on PoD pages (`/sepolia`, `/avalanche`) — decimal wealth UI. */
 const WEALTH_DECIMALS = (() => {
     const n = Number(import.meta.env.VITE_WEALTH_DECIMALS)
     return Number.isFinite(n) && n >= 0 && n <= 78 ? n : 18
@@ -432,13 +432,12 @@ export function MillionaireHomePage({ useContractHook, network }) {
         resetContract,
         contractAddress,
         podRpcUrl,
-        sepoliaRpcUrl,
         podAppChainId,
         aliceWallet,
         bobWallet
     } = useContractHook()
 
-    const podChainRpcUrl = podRpcUrl ?? sepoliaRpcUrl
+    const podChainRpcUrl = podRpcUrl
 
     // Alice state
     const [aliceWealth, setAliceWealth] = useState('')
@@ -472,11 +471,21 @@ export function MillionaireHomePage({ useContractHook, network }) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [aliceWallet, bobWallet, contractAddress, network])
 
-    const handlePodTrackerSettled = useCallback(() => {
+    const handlePodTrackerSettled = useCallback((outcome) => {
         setPodTracker(null)
         const r = podWaitRef.current
         podWaitRef.current = null
-        r?.()
+        if (!r) return
+        if (outcome?.failed) {
+            const exec = outcome.execution
+            const msg =
+                exec?.errorCode === 2n
+                    ? 'PoD MPC failed on COTI. Check the request tracker for details, reset, and try again.'
+                    : exec?.errorMessage || 'PoD MPC request failed before the callback landed on-chain.'
+            r.reject(new Error(msg))
+            return
+        }
+        r.resolve()
     }, [])
 
     const checkContractConnection = async () => {
@@ -690,8 +699,8 @@ export function MillionaireHomePage({ useContractHook, network }) {
                 comparisonTx.podInboxAddress &&
                 podChainRpcUrl
             ) {
-                await new Promise((resolve) => {
-                    podWaitRef.current = resolve
+                await new Promise((resolve, reject) => {
+                    podWaitRef.current = { resolve, reject }
                     setPodTracker({
                         inboxAddress: comparisonTx.podInboxAddress,
                         requestIdBob: comparisonTx.podTrackRequestId,
@@ -699,7 +708,14 @@ export function MillionaireHomePage({ useContractHook, network }) {
                 })
             }
 
-            const result = await getFullComparisonResult()
+            if (pollsMpc) {
+                setConnectionStatus('⏳ Waiting for the MPC result to be revealed on-chain...')
+            }
+            const result = await getFullComparisonResult(() => {
+                if (pollsMpc) {
+                    setConnectionStatus('⏳ Waiting for the MPC result to be revealed on-chain...')
+                }
+            })
 
             const txHash = comparisonTx.transaction.hash
             const explorerLink = ex.tx(txHash)
@@ -711,9 +727,7 @@ export function MillionaireHomePage({ useContractHook, network }) {
                 explorerLink: explorerLink
             })
             setShowComparisonModal(true)
-            if (!pollsMpc) {
-                setConnectionStatus('')
-            }
+            setConnectionStatus('')
         } catch (error) {
             console.error('Error performing comparison:', error)
             setConnectionStatus('❌ Error performing comparison: ' + (error.message || error.toString()))
@@ -739,8 +753,8 @@ export function MillionaireHomePage({ useContractHook, network }) {
                 comparisonTx.podInboxAddress &&
                 podChainRpcUrl
             ) {
-                await new Promise((resolve) => {
-                    podWaitRef.current = resolve
+                await new Promise((resolve, reject) => {
+                    podWaitRef.current = { resolve, reject }
                     setPodTracker({
                         inboxAddress: comparisonTx.podInboxAddress,
                         requestIdBob: comparisonTx.podTrackRequestId,
@@ -748,7 +762,16 @@ export function MillionaireHomePage({ useContractHook, network }) {
                 })
             }
 
-            const result = await getFullComparisonResult()
+            if (pollsMpc) {
+                setBobStatus('⏳ Waiting for the MPC result to be revealed on-chain...')
+                setBobStatusVariant('info')
+            }
+            const result = await getFullComparisonResult(() => {
+                if (pollsMpc) {
+                    setBobStatus('⏳ Waiting for the MPC result to be revealed on-chain...')
+                    setBobStatusVariant('info')
+                }
+            })
 
             const txHash = comparisonTx.transaction.hash
             const explorerLink = ex.tx(txHash)

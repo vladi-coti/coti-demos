@@ -42,7 +42,7 @@ const NETWORKS = {
     avalanche: {
         chainId: '43113',
         label: 'Avalanche Fuji',
-        explorer: 'https://testnet.snowtrace.io/address/',
+        explorer: 'https://testnet.snowscan.xyz/address/',
         addressEnv: ['VITE_CONTRACT_ADDRESS_AVALANCHE_FUJI', 'VITE_CONTRACT_ADDRESS'],
     },
 };

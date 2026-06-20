@@ -1,6 +1,6 @@
 import React, { Suspense, lazy } from 'react';
 import styled from 'styled-components';
-import { getPodNetwork } from '../lib/podNetworkConfig.js';
+import { getPodNetwork } from '../lib/pod/network.js';
 
 const PodHomePage = lazy(() => import('../pages/PodHomePage.jsx'));
 
