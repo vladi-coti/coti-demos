@@ -1,0 +1,2 @@
+pod-mpc-lib/=node_modules/pod-mpc-lib/contracts/
+@openzeppelin/contracts/=node_modules/@openzeppelin/contracts/

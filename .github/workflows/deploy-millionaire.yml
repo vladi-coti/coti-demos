@@ -1,0 +1,87 @@
+name: Deploy Millionaire
+
+# Builds the Millionaire Vite SPA and publishes it to S3 (optionally invalidating
+# CloudFront). Runs only when the millionaire app or this workflow changes, so the
+# other demos in the monorepo (age, auction, vote) don't trigger a deploy.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'milionaire/**'
+      - '.github/workflows/deploy-millionaire.yml'
+  workflow_dispatch:
+
+# One deploy at a time; cancel an in-progress run when a newer commit lands.
+concurrency:
+  group: deploy-millionaire
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: milionaire
+
+jobs:
+  build-and-deploy:
+    name: Build & deploy to S3
+    runs-on: ubuntu-latest
+    environment: millionaire-production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: milionaire/package-lock.json
+
+      - name: Install dependencies
+        # pod-mpc-lib postinstall needs patch-package (Hardhat only); skip for Vite build.
+        run: npm ci --ignore-scripts
+
+      - name: Build
+        env:
+          # Public, baked into the bundle at build time (GitHub Actions "Variables").
+          VITE_CONTRACT_ADDRESS_SEPOLIA: ${{ vars.VITE_CONTRACT_ADDRESS_SEPOLIA }}
+          VITE_CONTRACT_ADDRESS_AVALANCHE_FUJI: ${{ vars.VITE_CONTRACT_ADDRESS_AVALANCHE_FUJI }}
+          VITE_CONTRACT_ADDRESS_COTI_TESTNET: ${{ vars.VITE_CONTRACT_ADDRESS_COTI_TESTNET }}
+          SEPOLIA_RPC_URL: ${{ vars.SEPOLIA_RPC_URL }}
+          AVALANCHE_FUJI_RPC_URL: ${{ vars.AVALANCHE_FUJI_RPC_URL }}
+          COTI_TESTNET_RPC_URL: ${{ vars.COTI_TESTNET_RPC_URL }}
+          VITE_POD_REQUEST_EXPLORER_URL: ${{ vars.VITE_POD_REQUEST_EXPLORER_URL }}
+          VITE_POD_REQUEST_EXPLORER_URL_AVALANCHE: ${{ vars.VITE_POD_REQUEST_EXPLORER_URL_AVALANCHE }}
+          # Demo player keys + master secret (GitHub Actions "Secrets").
+          ENC_K: ${{ secrets.ENC_K }}
+          VITE_ALICE_PK: ${{ secrets.VITE_ALICE_PK }}
+          VITE_ALICE_AES_KEY: ${{ secrets.VITE_ALICE_AES_KEY }}
+          VITE_BOB_PK: ${{ secrets.VITE_BOB_PK }}
+          VITE_BOB_AES_KEY: ${{ secrets.VITE_BOB_AES_KEY }}
+        run: npm run build
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Sync to S3
+        # Long-cache the fingerprinted assets; never cache the HTML entrypoint so a
+        # new deploy is picked up immediately.
+        run: |
+          aws s3 sync dist/ "s3://${{ vars.MILLIONAIRE_S3_BUCKET }}" \
+            --delete \
+            --cache-control "public, max-age=31536000, immutable" \
+            --exclude "index.html"
+          aws s3 cp dist/index.html "s3://${{ vars.MILLIONAIRE_S3_BUCKET }}/index.html" \
+            --cache-control "no-cache, no-store, must-revalidate"
+
+      - name: Invalidate CloudFront
+        if: ${{ vars.MILLIONAIRE_CLOUDFRONT_DISTRIBUTION_ID != '' }}
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ vars.MILLIONAIRE_CLOUDFRONT_DISTRIBUTION_ID }}" \
+            --paths "/*"

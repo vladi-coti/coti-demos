@@ -1,6 +1,5 @@
 import React, { useState } from 'react'
 import styled from 'styled-components'
-import { useMillionaireContract } from '../hooks/useMillionaireContract.js'
 import {
     InfoBox,
     InfoTitle,
@@ -8,7 +7,7 @@ import {
     List,
     ListItem,
     Link
-} from './styles'
+} from './styles.js'
 
 const Overlay = styled.div`
   position: fixed;
@@ -95,11 +94,11 @@ const SmallActionButton = styled.button`
 
 const STORAGE_KEY = 'millionaire_intro_dismissed'
 
-function IntroModal({ onClose }) {
+function IntroModal({ onClose, useContractHook }) {
     const [isOpen, setIsOpen] = useState(true)
     const [isResetting, setIsResetting] = useState(false)
     const [resetStatus, setResetStatus] = useState('')
-    const { resetContract, checkWealthStatus } = useMillionaireContract()
+    const { resetContract, checkWealthStatus } = useContractHook()
 
     const handleClose = async () => {
         // Reset contract when closing the modal

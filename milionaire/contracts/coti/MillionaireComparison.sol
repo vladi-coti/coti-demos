@@ -22,27 +22,35 @@ contract MillionaireComparison {
     utBool private _aliceResult;  // Result encrypted for Alice
     utBool private _bobResult;    // Result encrypted for Bob
     
-    // Store addresses for consistent encryption
+    // Store addresses for consistent encryption (set via configurePlayers)
     address private _alice;
     address private _bob;
+
+    /// @notice Account that deployed the contract; may call configurePlayers once.
+    address private immutable _deployer;
     
     // Events for tracking operations
     event WealthSubmitted(address indexed user, string role);
     event ComparisonCompleted(address indexed requester);
-    
+    event PlayersConfigured(address indexed alice, address indexed bob);
+
+    constructor() {
+        _deployer = msg.sender;
+    }
+
     /**
-     * @notice Initialize the contract with Alice and Bob addresses
-     * @param alice Address of the first party (Alice)
-     * @param bob Address of the second party (Bob)
+     * @notice One-time setup of Alice and Bob (only deployer, before any wealth is set).
      */
-    constructor(address alice, address bob) {
+    function configurePlayers(address alice, address bob) external {
+        require(msg.sender == _deployer, "Only deployer");
+        require(_alice == address(0) && _bob == address(0), "Players already configured");
         require(alice != address(0) && bob != address(0), "Invalid addresses");
         require(alice != bob, "Alice and Bob must be different");
-        
+
         _alice = alice;
         _bob = bob;
-        _aliceSet = false;
-        _bobSet = false;
+
+        emit PlayersConfigured(alice, bob);
     }
 
     /**
@@ -71,6 +79,7 @@ contract MillionaireComparison {
      * @param wealth Encrypted input (itUint64) representing Alice's wealth
      */
     function setAliceWealth(itUint64 calldata wealth) external {
+        require(_alice != address(0), "Players not configured");
         require(msg.sender == _alice, "Only Alice can set her wealth");
         require(!_aliceSet, "Alice's wealth already set");
         
@@ -86,6 +95,7 @@ contract MillionaireComparison {
      * @param wealth Encrypted input (itUint64) representing Bob's wealth
      */
     function setBobWealth(itUint64 calldata wealth) external {
+        require(_bob != address(0), "Players not configured");
         require(msg.sender == _bob, "Only Bob can set his wealth");
         require(!_bobSet, "Bob's wealth already set");
         
@@ -102,6 +112,7 @@ contract MillionaireComparison {
      * @dev Result: true = you're richer, false = you're not (or tie)
      */
     function compareWealth() external {
+        require(_alice != address(0) && _bob != address(0), "Players not configured");
         // Validation
         require(_aliceSet && _bobSet, "Both parties must submit their wealth first");
 
@@ -176,6 +187,7 @@ contract MillionaireComparison {
      * @dev Can only be called by Alice (contract initiator)
      */
     function reset() external {
+        require(_alice != address(0), "Players not configured");
         require(msg.sender == _alice, "Only Alice can reset the contract");
         _aliceSet = false;
         _bobSet = false;

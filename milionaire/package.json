@@ -1,35 +1,49 @@
 {
-  "name": "millionaire-comparison",
+  "name": "millionaire-merged",
   "version": "1.0.0",
-  "description": "Yao's Millionaires' Problem implementation using COTI MPC",
+  "private": true,
+  "description": "Millionaires' Problem UI: COTI native MPC or PoD on Sepolia / Avalanche Fuji",
+  "type": "module",
   "scripts": {
-    "deploy:coti": "hardhat run scripts/deploy-MillionaireComparison.js --network cotiTestnet",
-    "compile": "hardhat compile",
-    "test": "hardhat test",
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "compile": "hardhat compile",
+    "compile:pod": "HARDHAT_CONTRACTS_SCOPE=pod hardhat compile",
+    "deploy": "hardhat run scripts/deploy-MillionaireComparison.js --network cotiTestnet",
+    "deploy:coti": "hardhat run scripts/deploy-MillionaireComparison.js --network cotiTestnet",
+    "deploy:pod": "HARDHAT_CONTRACTS_SCOPE=pod hardhat run scripts/deploy-MillionaireComparisonPod.js --network sepolia",
+    "deploy:pod:avalanche": "HARDHAT_CONTRACTS_SCOPE=pod hardhat run scripts/deploy-MillionaireComparisonPod.js --network avalancheFuji",
+    "verify:pod": "node scripts/postStandardJsonVerify.mjs pod",
+    "verify:pod:avalanche": "node scripts/postStandardJsonVerify.mjs avalanche",
+    "verify:coti": "node scripts/verify-MillionaireComparison-cotiscan.js",
+    "encrypt-key": "node scripts/cli.js"
   },
   "dependencies": {
-    "@coti-io/coti-contracts": "^1.0.0",
+    "@coti-io/coti-contracts": "github:naiemk-coti/coti-contracts",
     "@coti-io/coti-ethers": "^1.0.5",
+    "@coti/pod-sdk": "github:cotitech-io/coti-pod-sdk",
+    "@noble/ciphers": "^2.1.1",
+    "@noble/hashes": "^2.0.1",
+    "@openzeppelin/contracts": "^5.6.1",
     "ethers": "^6.0.0",
+    "pod-mpc-lib": "github:cotitech-io/pod-mpc-lib",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^7.9.5",
     "styled-components": "^6.1.19"
   },
   "devDependencies": {
-    "@nomicfoundation/hardhat-chai-matchers": "^2.1.0",
-    "@nomicfoundation/hardhat-ethers": "^3.0.0",
-    "@nomicfoundation/hardhat-verify": "^2.1.3",
+    "@nomicfoundation/hardhat-ethers": "^4.0.6",
+    "@nomicfoundation/hardhat-ignition": "^3.0.6",
+    "@nomicfoundation/hardhat-verify": "^3.0.12",
     "@vitejs/plugin-react": "^4.0.0",
     "assert": "^2.0.0",
     "buffer": "^6.0.3",
     "chai": "^4.5.0",
     "crypto-browserify": "^3.12.0",
     "dotenv": "^16.0.0",
-    "hardhat": "^2.19.0",
+    "hardhat": "^3.1.3",
     "https-browserify": "^1.0.0",
     "os-browserify": "^0.3.0",
     "process": "^0.11.10",
@@ -37,6 +51,5 @@
     "stream-http": "^3.2.0",
     "url": "^0.11.0",
     "vite": "^4.4.0"
-  },
-  "type": "module"
+  }
 }
