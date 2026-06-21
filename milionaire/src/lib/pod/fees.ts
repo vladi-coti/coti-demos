@@ -41,10 +41,10 @@ export async function estimateCompareWealthFee(
 
     const callbackBudgetWei = callerGasLocalWei * CALLBACK_GAS_BUFFER;
     const totalFeeWei = max(
-        targetGasRemoteInLocalWei * REMOTE_GAS_BUFFER + callbackBudgetWei * 2n,
+        targetGasRemoteInLocalWei * REMOTE_GAS_BUFFER + callbackBudgetWei,
         CONTRACT_MIN_TOTAL_FEE_WEI
     );
-    const maxCallbackFeeWei = totalFeeWei / 2n - 1n;
+    const maxCallbackFeeWei = totalFeeWei - 1n;
     let callbackFeeWei = callbackBudgetWei;
     if (callbackFeeWei > maxCallbackFeeWei) callbackFeeWei = maxCallbackFeeWei;
     if (callbackFeeWei < 1n) callbackFeeWei = 1n;

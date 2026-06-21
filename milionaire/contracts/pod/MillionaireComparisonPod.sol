@@ -3,15 +3,21 @@
 pragma solidity ^0.8.19;
 
 import { PodLibBase } from "pod-mpc-lib/mpc/PodLibBase.sol";
-import { PodLib } from "pod-mpc-lib/mpc/PodLib.sol";
-import { ctBool, ctUint64, itUint64 } from "pod-mpc-lib/utils/mpc/MpcCore.sol";
+import { IInbox } from "pod-mpc-lib/IInbox.sol";
+import { MpcAbiCodec } from "pod-mpc-lib/mpccodec/MpcAbiCodec.sol";
+import { ctBool, ctUint64, gtUint64, itUint64 } from "pod-mpc-lib/utils/mpc/MpcCore.sol";
+
+interface IMillionaireComparisonCoti {
+    function compareWealth(gtUint64 aliceWealth, gtUint64 bobWealth, address alice, address bob) external;
+}
 
 /**
  * @title MillionaireComparisonPod
  * @notice Yao's Millionaires' Problem using COTI PoD MPC — **64-bit** encrypted wealth.
  * @dev Network-agnostic: the owner sets the inbox and COTI routing post-deploy via {PodUser-configure}.
  */
-contract MillionaireComparisonPod is PodLib {
+contract MillionaireComparisonPod is PodLibBase {
+    using MpcAbiCodec for MpcAbiCodec.MpcMethodCallContext;
 
     bytes32 public compareRequestIdAlice;
     bytes32 public compareRequestIdBob;
@@ -92,48 +98,46 @@ contract MillionaireComparisonPod is PodLib {
         emit WealthSubmitted(msg.sender, false);
     }
 
-    /// @param callbackFeeWei Native wei forwarded to the inbox as `callbackFeeLocalWei` per `gt64` leg (same value for Alice and Bob).
+    /// @param callbackFeeWei Native wei forwarded to the inbox for the callback that carries both user results.
     function compareWealth(uint256 callbackFeeWei) external payable {
         require(_alice != address(0) && _bob != address(0), "Players not configured");
         require(_aliceSet && _bobSet, "Both parties must submit their wealth first");
-        require(msg.value >= 200 gwei, "need 200 gwei fee for two MPC callbacks");
-        uint256 providedFee = msg.value / 2;
+        require(msg.value >= 200 gwei, "need 200 gwei fee for MPC callback");
         require(callbackFeeWei >= MIN_CALLBACK_FEE_WEI, "callback fee too low");
-        require(callbackFeeWei < providedFee, "callback fee exceeds leg budget");
+        require(callbackFeeWei < msg.value, "callback fee exceeds budget");
 
         itUint64 memory aliceWealth = _aliceWealth;
         itUint64 memory bobWealth = _bobWealth;
 
-        compareRequestIdAlice = gt64(
-            aliceWealth,
-            bobWealth,
-            _alice,
+        IInbox.MpcMethodCall memory methodCall = MpcAbiCodec
+            .create(IMillionaireComparisonCoti.compareWealth.selector, 4)
+            .addArgument(aliceWealth)
+            .addArgument(bobWealth)
+            .addArgument(_alice)
+            .addArgument(_bob)
+            .build();
+
+        bytes32 requestId = _forwardTwoWay(
+            methodCall,
             this.revealCallback.selector,
             this.onDefaultMpcError.selector,
-            providedFee,
+            msg.value,
             callbackFeeWei);
-        compareRequestIdBob = gt64(
-            aliceWealth,
-            bobWealth,
-            _bob,
-            this.revealCallback.selector,
-            this.onDefaultMpcError.selector,
-            providedFee,
-            callbackFeeWei);
+        compareRequestIdAlice = requestId;
+        compareRequestIdBob = requestId;
 
         emit ComparisonRequested(msg.sender, compareRequestIdAlice, compareRequestIdBob);
     }
 
     function revealCallback(bytes memory data) external onlyInbox {
         bytes32 requestId = inbox.inboxSourceRequestId();
-        ctBool result = abi.decode(data, (ctBool));
         if (requestId == compareRequestIdAlice) {
-            _aliceResult = result;
+            (ctBool aliceResult, ctBool bobResult) = abi.decode(data, (ctBool, ctBool));
+            _aliceResult = aliceResult;
+            _bobResult = bobResult;
             aliceResultReady = true;
-            emit ResultReady(_alice, requestId);
-        } else if (requestId == compareRequestIdBob) {
-            _bobResult = result;
             bobResultReady = true;
+            emit ResultReady(_alice, requestId);
             emit ResultReady(_bob, requestId);
         }
     }

@@ -3,6 +3,8 @@ export const MILLIONAIRE_COMPARISON_ABI = [
     'function setAliceWealth(tuple(uint256 ciphertext, bytes signature) wealth) external',
     'function setBobWealth(tuple(uint256 ciphertext, bytes signature) wealth) external',
     'function compareWealth(uint256 callbackFeeWei) external payable',
+    'function compareRequestIdAlice() external view returns (bytes32)',
+    'function compareRequestIdBob() external view returns (bytes32)',
     'function inbox() external view returns (address)',
     'function isAliceWealthSet() external view returns (bool)',
     'function isBobWealthSet() external view returns (bool)',

@@ -40,6 +40,7 @@ export default {
                       {
                           version: "0.8.26",
                           settings: {
+                              evmVersion: "paris",
                               optimizer: { enabled: true, runs: 200 },
                           },
                       },

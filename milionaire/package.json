@@ -12,6 +12,7 @@
     "compile:pod": "HARDHAT_CONTRACTS_SCOPE=pod hardhat compile",
     "deploy": "hardhat run scripts/deploy-MillionaireComparison.js --network cotiTestnet",
     "deploy:coti": "hardhat run scripts/deploy-MillionaireComparison.js --network cotiTestnet",
+    "deploy:pod:coti-target": "HARDHAT_CONTRACTS_SCOPE=pod hardhat run scripts/deploy-MillionaireComparisonCoti.js --network cotiTestnet",
     "deploy:pod": "HARDHAT_CONTRACTS_SCOPE=pod hardhat run scripts/deploy-MillionaireComparisonPod.js --network sepolia",
     "deploy:pod:avalanche": "HARDHAT_CONTRACTS_SCOPE=pod hardhat run scripts/deploy-MillionaireComparisonPod.js --network avalancheFuji",
     "verify:pod": "node scripts/postStandardJsonVerify.mjs pod",

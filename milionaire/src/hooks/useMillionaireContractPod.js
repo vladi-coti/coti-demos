@@ -85,7 +85,7 @@ export function makeUseMillionaireContractPod(networkId) {
                 const podInbox = await contract.inbox();
                 const fee = await estimateCompareWealthFee(provider, podInbox);
                 const tx = await contract.compareWealth(fee.callbackFeeWei, {
-                    gasLimit: 2_500_000,
+                    gasLimit: 1_500_000,
                     value: fee.totalFeeWei,
                 });
                 const receipt = await tx.wait();

@@ -97,10 +97,13 @@ async function main() {
 
     const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
     if (target.inbox && target.inbox !== ZERO_ADDRESS) {
+        const mpcExecutorAddress =
+            process.env.COTI_TESTNET_MPC_EXECUTOR_ADDRESS || COTI_TESTNET_MPC_EXECUTOR_ADDRESS;
         console.log('Configuring inbox + COTI routing…');
+        console.log('MPC executor:', mpcExecutorAddress);
         const cfgTx = await contract.configure(
             target.inbox,
-            COTI_TESTNET_MPC_EXECUTOR_ADDRESS,
+            mpcExecutorAddress,
             COTI_TESTNET_CHAIN_ID,
             { gasLimit: 200_000 },
         );
