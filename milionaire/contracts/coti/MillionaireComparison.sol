@@ -117,8 +117,8 @@ contract MillionaireComparison {
         require(_aliceSet && _bobSet, "Both parties must submit their wealth first");
 
         // Load encrypted wealth
-        gtUint64 aliceWealth = MpcCore.onBoard(_aliceWealth.userCiphertext);
-        gtUint64 bobWealth = MpcCore.onBoard(_bobWealth.userCiphertext);
+        gtUint64 aliceWealth = MpcCore.onBoard(_aliceWealth.ciphertext);
+        gtUint64 bobWealth = MpcCore.onBoard(_bobWealth.ciphertext);
 
         // Perform comparison: ONLY check if Alice is richer
         // true  = Alice > Bob
